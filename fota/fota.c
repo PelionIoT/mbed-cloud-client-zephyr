@@ -41,6 +41,7 @@
 #include "fota/fota_component_internal.h"
 #include "fota/fota_fw_download.h"
 #include "fota/fota_ext_downloader.h"
+#include "fota/fota_storage.h"
 #include <stdlib.h>
 #include <inttypes.h>
 
@@ -428,6 +429,7 @@ finalize:
 
 #endif
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
 static void fota_after_upgrade()
 {
     int ret = 0;
@@ -483,6 +485,7 @@ static void fota_after_upgrade()
     fota_nvm_fw_encryption_key_delete();
 
 }
+#endif
 
 bool fota_is_active_update(void)
 {
@@ -643,7 +646,7 @@ static int comp_install_verify(const fota_component_desc_t *comp_desc, unsigned 
     return ret;
 }
 
-
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
 static int fota_verify_installation_after_upgrade()
 {
     int ret = FOTA_STATUS_SUCCESS;
@@ -669,7 +672,9 @@ static int fota_verify_installation_after_upgrade()
 
     return ret;
 }
+#endif
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
 static int calc_available_storage(void)
 {
     size_t storage_start_addr, storage_end_addr, erase_size;
@@ -686,6 +691,7 @@ static int calc_available_storage(void)
     storage_available = storage_end_addr - storage_start_addr;
     return FOTA_STATUS_SUCCESS;
 }
+#endif
 
 int fota_init(void *m2m_interface, void *resource_list)
 {
@@ -717,6 +723,11 @@ int fota_init(void *m2m_interface, void *resource_list)
 
 #if defined(TARGET_LIKE_LINUX)
     ret = fota_linux_init();
+    FOTA_ASSERT(!ret);
+#endif
+
+#if !FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
+    ret = fota_storage_init();
     FOTA_ASSERT(!ret);
 #endif
 
@@ -802,10 +813,12 @@ int fota_init(void *m2m_interface, void *resource_list)
     ret = fota_platform_init_hook(after_upgrade);
     FOTA_ASSERT(!ret);
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
     if (after_upgrade) {
         FOTA_TRACE_DEBUG("After upgrade, verifying installation");
         fota_after_upgrade();
     }// after_upgrade
+#endif
 
 #if (FOTA_COMPONENT_SUPPORT)
     // Now we should have all components registered, report them all
@@ -815,7 +828,13 @@ int fota_init(void *m2m_interface, void *resource_list)
         char semver[FOTA_COMPONENT_MAX_SEMVER_STR_SIZE] = {0};
         fota_component_version_t version;
         fota_component_get_desc(i, &comp_desc);
+
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
         ret = fota_nvm_comp_version_get(comp_desc->name, &version);
+#else
+        ret = fota_storage_query(i, &header_info);
+        version = header_info.version;
+#endif
 
         // if not found, take factory version, set as current version.
         // Always true in main component case, which shouldn't be saved in NVM.
@@ -975,6 +994,7 @@ fail:
     return FOTA_STATUS_SUCCESS;
 }
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
 static int init_header(size_t prog_size)
 {
     fota_ctx->fw_header_bd_size = FOTA_ALIGN_UP(fota_get_header_size(), prog_size);
@@ -996,6 +1016,7 @@ static int init_header(size_t prog_size)
     fota_ctx->storage_addr += fota_ctx->candidate_header_size + fota_ctx->fw_header_bd_size;
     return FOTA_STATUS_SUCCESS;
 }
+#endif
 
 void request_download_auth(void)
 {
@@ -1266,6 +1287,7 @@ static void on_reboot(void)
     REBOOT_NOW();
 }
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
 static int write_candidate_ready(const char *comp_name)
 {
 #if FOTA_HEADER_HAS_CANDIDATE_READY
@@ -1310,6 +1332,7 @@ finish:
     return FOTA_STATUS_SUCCESS;
 #endif
 }
+#endif
 
 static void install_single_component()
 {
@@ -1350,6 +1373,7 @@ static void install_single_component()
     if (do_install) {
         FOTA_TRACE_INFO("Installing new version for component %s", comp_desc->name);
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
         // Run the installer using the candidate iterate service
         ret = fota_candidate_iterate_image(true, (bool) MBED_CLOUD_CLIENT_FOTA_ENCRYPTION_SUPPORT,
                                            comp_desc->name, install_alignment,
@@ -1358,6 +1382,7 @@ static void install_single_component()
             abort_update(ret, "Failed on component update");
             return;
         }
+#endif
 
 #if defined(TARGET_LIKE_LINUX)
         if (!fota_component_is_internal_component(comp_id)) {
@@ -1613,6 +1638,7 @@ static int prepare_and_program_header(void)
     header_info.flags |= FOTA_HEADER_SUPPORT_RESUME_FLAG;
 #endif
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
     ret = fota_serialize_header(&header_info, header_buf, fota_ctx->fw_header_bd_size, &header_buf_actual_size);
     if (ret) {
         FOTA_TRACE_ERROR("serialize header failed");
@@ -1625,6 +1651,9 @@ static int prepare_and_program_header(void)
     if (ret) {
         FOTA_TRACE_ERROR("header buf write to storage failed %d", ret);
     }
+#else
+    ret = fota_storage_set_manifest(fota_ctx->comp_id, fota_ctx->fw_info);
+#endif
 
 fail:
     free(header_buf);
@@ -1880,6 +1909,7 @@ finish:
 
 #endif // MBED_CLOUD_CLIENT_FOTA_RESUME_SUPPORT == FOTA_RESUME_SUPPORT_RESUME
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
 static int calc_and_erase_needed_storage()
 {
     int ret;
@@ -1947,6 +1977,7 @@ static int calc_and_erase_needed_storage()
 
     return ret;
 }
+#endif
 
 static void fota_on_download_authorize()
 {
@@ -1966,6 +1997,7 @@ static void fota_on_download_authorize()
         goto fail;
     }
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
     ret = fota_bd_init();
     if (ret) {
         FOTA_TRACE_ERROR("Unable to initialize storage %d", ret);
@@ -1992,6 +2024,9 @@ static void fota_on_download_authorize()
     if (ret) {
         goto fail;
     }
+#else
+    prog_size = FOTA_MAX_BLOCK_SIZE;
+#endif
 
 #if (MBED_CLOUD_CLIENT_FOTA_ENCRYPTION_SUPPORT == 1) && \
     (MBED_CLOUD_CLIENT_FOTA_CANDIDATE_BLOCK_SIZE != FOTA_CLOUD_ENCRYPTION_BLOCK_SIZE)
@@ -2034,6 +2069,7 @@ static void fota_on_download_authorize()
     }
 #endif
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
     fota_ctx->fw_header_offset = fota_ctx->storage_addr - fota_ctx->fw_header_bd_size;
 
     ret = calc_available_storage();
@@ -2068,6 +2104,12 @@ static void fota_on_download_authorize()
             }
         }
     }
+#else
+    ret = prepare_and_program_header();
+    if (ret) {
+        goto fail;
+    }
+#endif
 
     // At this point, we have converged to regular state, even if we were resuming
     fota_ctx->resume_state = FOTA_RESUME_STATE_INACTIVE;
@@ -2147,6 +2189,7 @@ static void fota_on_install_authorize(fota_install_state_e fota_install_type)
     free(fota_ctx->page_buf);
     fota_ctx->page_buf = NULL;
 
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
     if (fota_install_state != FOTA_INSTALL_STATE_DEFER) {
         if (fota_ctx->candidate_header_size) {
             ret = write_candidate_ready(comp_desc->name);
@@ -2158,6 +2201,9 @@ static void fota_on_install_authorize(fota_install_state_e fota_install_type)
             goto fail;
         }
     }
+#else
+    ret = fota_storage_install(fota_ctx->comp_id);
+#endif
 
     if ((fota_install_state == FOTA_INSTALL_STATE_AUTHORIZE) || (fota_install_state == FOTA_INSTALL_STATE_POSTPONE_REBOOT))  {
         fota_source_report_state(FOTA_SOURCE_STATE_UPDATING, install_component, on_state_set_failure);
@@ -2257,7 +2303,15 @@ static int program_to_storage(uint8_t *buf, size_t addr, uint32_t size)
             prog_size = FOTA_ALIGN_UP(prog_size, fota_ctx->page_buf_size);
         }
         if (do_program) {
+#if FOTA_DIRECT_BLOCK_DEVICE_SUPPORT
             ret = fota_bd_program(prog_buf, addr, prog_size);
+#else
+            ret = fota_storage_write(fota_ctx->comp_id,
+                                     addr,
+                                     prog_buf,
+                                     prog_size);
+#endif
+
             if (ret) {
                 FOTA_TRACE_ERROR("Write to storage failed, address 0x%zx, size %" PRIu32 " %d",
                                  addr, size, ret);

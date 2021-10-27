@@ -430,6 +430,10 @@ extern char *program_invocation_name;
 #define FOTA_MCCP_PROTOCOL_VERSION 4
 #endif
 
+#if !defined(FOTA_DIRECT_BLOCK_DEVICE_SUPPORT)
+#define FOTA_DIRECT_BLOCK_DEVICE_SUPPORT 1
+#endif
+
 #endif  // MBED_CLOUD_CLIENT_FOTA_ENABLE
 
 #endif  // __FOTA_CONFIG_H_

@@ -106,6 +106,11 @@
             "help": "Sub-component support enabled",
             "macro_name": "MBED_CLOUD_CLIENT_FOTA_SUB_COMPONENT_SUPPORT",
             "value": null
+        },
+        "direct-block-device-support": {
+            "help": "FOTA can read/write directly to block device",
+            "macro_name": "FOTA_DIRECT_BLOCK_DEVICE_SUPPORT",
+            "value": 1
         }
     }
 }
