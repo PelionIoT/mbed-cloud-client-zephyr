@@ -79,19 +79,21 @@ if PELION_UPDATE
           Marking new firmware as permanent is useful during the development phase
           where applications evolve rapidly.
 
-    config PELION_UPDATE_BUFFER
-        int "Download buffer size for firmware updates"
-        default 1024
+    config PELION_UPDATE_COMPONENTS
+        int "Maximum number of individually updateable components"
+        default 1
         help
-          Buffer used for downloading and processing firmware. Must be divisible
-          by 2.
+          Each component's name and version are reported to the Cloud and can be
+          targeted in a firmware update campaign. First component (ID:0) is always
+          labeled MAIN.
 
-    config PELION_UPDATE_PAGE_SIZE
-        int "Page size for the candidate firmware image's storage medium"
-        default 8
+    config PELION_UPDATE_DEFAULT_APP_IFS
+        bool "Use built-in application hooks for controlling update flow"
+        default y
         help
-          Smallest write granularity supported by the underlying storage medium.
-          This value is used at compile time to ensure buffers are correctly aligned.
+          Use built-in functions for accepting new firmware and print out download
+          progress. Disable built-in functions and provide custom appliction to
+          control download flow and output download progress.
 
     config PELION_UPDATE_DEVELOPER
         bool "Automatically populate developer update credentials in secure storage"

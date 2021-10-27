@@ -328,10 +328,10 @@ endif()
         "${FOTA_SOURCE_DIR}/bspatch/*.c"
 if ( (${OS_BRAND} MATCHES "Linux"))
         "${FOTA_SOURCE_DIR}/platform/linux/*.c*"
-else
-if ( (${OS_BRAND} MATCHES "NXP"))
+elseif ( (${OS_BRAND} MATCHES "NXP"))
         "${FOTA_SOURCE_DIR}/platform/nxp/*.c*"
-endif
+elseif ( (${OS_BRAND} MATCHES "ZephyrOS"))
+        "${FOTA_SOURCE_DIR}/platform/zephyr/*.c*"
 endif
     )
     message("FOTA sources = \n ${FOTA_SRC}")
